@@ -23,3 +23,19 @@ dist-ssr
 *.sln
 *.sw?
 .vite
+
+# Environment variables and sensitive files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+
+# AWS credentials and config
+.aws/
+aws-exports.js
+
+# Temporary files
+*.tmp
+*.temp
