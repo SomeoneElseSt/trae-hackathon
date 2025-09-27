@@ -19,11 +19,21 @@ const router = Router();
  * Validates Python code and creates a new API
  */
 router.post('/generate', async (req: Request, res: Response) => {
+  console.log('🚀 [BACKEND] /api/generate route hit');
+  console.log('🚀 [BACKEND] Request body:', req.body);
+  
   try {
     const { name, description, python_code }: CreateApiRequest = req.body;
+    console.log('📋 [BACKEND] Extracted fields:');
+    console.log('📋 [BACKEND] - name:', name);
+    console.log('📋 [BACKEND] - description:', description);
+    console.log('📋 [BACKEND] - python_code length:', python_code?.length || 0);
     
     // Validate required fields
     if (!name || !python_code) {
+      console.log('❌ [BACKEND] Validation failed: missing required fields');
+      console.log('❌ [BACKEND] - name present:', !!name);
+      console.log('❌ [BACKEND] - python_code present:', !!python_code);
       const response: CreateApiResponse = {
         success: false,
         error: 'Name and python_code are required'
@@ -31,9 +41,19 @@ router.post('/generate', async (req: Request, res: Response) => {
       return res.status(400).json(response);
     }
     
+    console.log('✅ [BACKEND] Required fields validation passed');
+    
     // Validate Python code
+    console.log('🔍 [BACKEND] Starting Python code validation');
     const validation = PythonValidator.validateCode(python_code);
+    console.log('🔍 [BACKEND] Validation result:', {
+      isValid: validation.isValid,
+      hasAnalysis: !!validation.analysis,
+      error: validation.error
+    });
+    
     if (!validation.isValid || !validation.analysis) {
+      console.log('❌ [BACKEND] Python validation failed:', validation.error);
       const response: CreateApiResponse = {
         success: false,
         error: validation.error || 'Code validation failed'
@@ -41,7 +61,12 @@ router.post('/generate', async (req: Request, res: Response) => {
       return res.status(400).json(response);
     }
     
+    console.log('✅ [BACKEND] Python validation passed');
+    console.log('✅ [BACKEND] Function name:', validation.analysis.functionName);
+    console.log('✅ [BACKEND] Parameters:', validation.analysis.parameters);
+    
     // Generate unique API ID
+    console.log('🎲 [BACKEND] Generating unique API ID');
     let apiId: string;
     let attempts = 0;
     const maxAttempts = 10;
@@ -49,38 +74,59 @@ router.post('/generate', async (req: Request, res: Response) => {
     do {
       apiId = IdGenerator.generateApiId();
       attempts++;
+      console.log(`🎲 [BACKEND] Generated API ID attempt ${attempts}: ${apiId}`);
       
       if (attempts > maxAttempts) {
+        console.log('❌ [BACKEND] Failed to generate unique API ID after max attempts');
         const response: CreateApiResponse = {
           success: false,
           error: 'Failed to generate unique API ID'
         };
         return res.status(500).json(response);
       }
+      
+      const exists = await DatabaseService.apiIdExists(apiId);
+      console.log(`🎲 [BACKEND] API ID ${apiId} exists: ${exists}`);
     } while (await DatabaseService.apiIdExists(apiId));
     
+    console.log('✅ [BACKEND] Unique API ID generated:', apiId);
+    
     // Generate JSON schema
+    console.log('📋 [BACKEND] Generating JSON schema');
     const inputSchema = PythonValidator.generateJsonSchema(validation.analysis.parameters);
+    console.log('📋 [BACKEND] Generated schema:', inputSchema);
     
     // Deploy to AWS Lambda and create API Gateway
+    console.log('☁️ [BACKEND] Initializing AWS service');
     const awsService = new AWSService();
     const functionName = `codeapi-${apiId}`;
     const roleName = `codeapi-execution-role-${apiId}`;
+    console.log('☁️ [BACKEND] AWS function name:', functionName);
+    console.log('☁️ [BACKEND] AWS role name:', roleName);
     
     try {
       // Create IAM role for Lambda execution
+      console.log('🔐 [BACKEND] Creating IAM role for Lambda execution');
       const roleArn = await awsService.createLambdaExecutionRole(roleName);
+      console.log('✅ [BACKEND] IAM role created:', roleArn);
       
       // Wait a bit for role to propagate
+      console.log('⏳ [BACKEND] Waiting 10 seconds for role propagation');
       await new Promise(resolve => setTimeout(resolve, 10000));
+      console.log('✅ [BACKEND] Role propagation wait completed');
       
       // Deploy Lambda function
+      console.log('🚀 [BACKEND] Deploying Lambda function');
       const lambdaArn = await awsService.deployLambdaFunction(functionName, python_code, roleArn);
+      console.log('✅ [BACKEND] Lambda function deployed:', lambdaArn);
       
       // Create API Gateway
+      console.log('🌐 [BACKEND] Creating API Gateway');
       const apiGatewayUrl = await awsService.createApiGateway(`codeapi-${apiId}`, lambdaArn);
+      console.log('✅ [BACKEND] API Gateway created:', apiGatewayUrl);
       
       // Create API record with AWS details
+      console.log('💾 [BACKEND] Saving API record to database');
       const apiRecord = await DatabaseService.createApi({
         api_id: apiId,
         name,
@@ -89,6 +135,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         function_name: validation.analysis.functionName,
         input_schema: inputSchema
       });
+      console.log('✅ [BACKEND] API record saved:', apiRecord.id);
       
       const response: CreateApiResponse = {
         success: true,
@@ -97,11 +144,16 @@ router.post('/generate', async (req: Request, res: Response) => {
         input_schema: inputSchema
       };
       
+      console.log('🎉 [BACKEND] AWS deployment successful, sending response:', response);
       res.status(201).json(response);
     } catch (awsError) {
-      console.error('AWS deployment error:', awsError);
+      console.log('💥 [BACKEND] AWS deployment error occurred:');
+      console.error('💥 [BACKEND] AWS Error details:', awsError);
+      console.log('💥 [BACKEND] AWS Error message:', awsError instanceof Error ? awsError.message : 'Unknown AWS error');
+      console.log('💥 [BACKEND] AWS Error stack:', awsError instanceof Error ? awsError.stack : 'No stack trace');
       
       // Fallback to local execution for demo
+      console.log('🔄 [BACKEND] Falling back to local execution');
       const apiRecord = await DatabaseService.createApi({
         api_id: apiId,
         name,
@@ -110,6 +162,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         function_name: validation.analysis.functionName,
         input_schema: inputSchema
       });
+      console.log('✅ [BACKEND] Local API record saved:', apiRecord.id);
       
       const response: CreateApiResponse = {
         success: true,
@@ -119,14 +172,21 @@ router.post('/generate', async (req: Request, res: Response) => {
         warning: 'AWS deployment failed, using local execution'
       };
       
+      console.log('⚠️ [BACKEND] Local fallback response:', response);
       res.status(201).json(response);
      }
   } catch (error) {
-    console.error('Error generating API:', error);
+    console.log('💥 [BACKEND] Main catch block - Unexpected error occurred:');
+    console.error('💥 [BACKEND] Main Error details:', error);
+    console.log('💥 [BACKEND] Main Error message:', error instanceof Error ? error.message : 'Unknown error');
+    console.log('💥 [BACKEND] Main Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    
     const response: CreateApiResponse = {
       success: false,
       error: 'Internal server error'
     };
+    
+    console.log('💥 [BACKEND] Sending error response:', response);
     res.status(500).json(response);
   }
 });

@@ -1,20 +1,7 @@
 import React, { useState } from 'react';
 import { Editor } from '@monaco-editor/react';
-import { Play, Code, AlertCircle, CheckCircle, Copy } from 'lucide-react';
+import { Code, CheckCircle, Copy } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
-
-interface ValidationResult {
-  isValid: boolean;
-  error?: string;
-  analysis?: {
-    functionName: string;
-    parameters: Array<{
-      name: string;
-      type: string;
-      required: boolean;
-    }>;
-  };
-}
 
 interface CreateApiResponse {
   success: boolean;
@@ -33,102 +20,85 @@ export default function Home() {
   const [code, setCode] = useState(defaultCode);
   const [apiName, setApiName] = useState('');
   const [apiDescription, setApiDescription] = useState('');
-  const [isValidating, setIsValidating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [generatedApi, setGeneratedApi] = useState<CreateApiResponse | null>(null);
 
-  const validateCode = async () => {
-    if (!code.trim()) {
-      setValidationResult({
-        isValid: false,
-        error: 'Please enter some Python code'
-      });
-      return;
-    }
-
-    setIsValidating(true);
-    try {
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: 'validation-test',
-          python_code: code
-        })
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setValidationResult({
-          isValid: true,
-          analysis: {
-            functionName: 'Function detected',
-            parameters: []
-          }
-        });
-        toast.success('Code validation passed!');
-      } else {
-        setValidationResult({
-          isValid: false,
-          error: result.error
-        });
-        toast.error(result.error);
-      }
-    } catch (error) {
-      setValidationResult({
-        isValid: false,
-        error: 'Failed to validate code'
-      });
-      toast.error('Failed to validate code');
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
   const generateApi = async () => {
+    console.log('🚀 [FRONTEND] Generate API button clicked');
+    console.log('🚀 [FRONTEND] API Name:', apiName);
+    console.log('🚀 [FRONTEND] API Description:', apiDescription);
+    console.log('🚀 [FRONTEND] Python Code Length:', code.length);
+    
     if (!apiName.trim()) {
+      console.log('❌ [FRONTEND] Validation failed: API name is empty');
       toast.error('Please enter an API name');
       return;
     }
 
-    if (!validationResult?.isValid) {
-      toast.error('Please validate your code first');
+    if (!code.trim()) {
+      console.log('❌ [FRONTEND] Validation failed: Python code is empty');
+      toast.error('Please enter some Python code');
       return;
     }
 
+    console.log('✅ [FRONTEND] Validation passed, starting API generation');
     setIsGenerating(true);
+    
     try {
+      const requestBody = {
+        name: apiName,
+        description: apiDescription,
+        python_code: code
+      };
+      
+      console.log('📤 [FRONTEND] Sending request to /api/generate');
+      console.log('📤 [FRONTEND] Request body:', requestBody);
+      
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          name: apiName,
-          description: apiDescription,
-          python_code: code
-        })
+        body: JSON.stringify(requestBody)
       });
 
+      console.log('📥 [FRONTEND] Response received');
+      console.log('📥 [FRONTEND] Response status:', response.status);
+      console.log('📥 [FRONTEND] Response ok:', response.ok);
+      
+      if (!response.ok) {
+        console.log('❌ [FRONTEND] Response not ok, status:', response.status);
+        const errorText = await response.text();
+        console.log('❌ [FRONTEND] Error response text:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
       const result = await response.json();
+      console.log('📥 [FRONTEND] Parsed response:', result);
       
       if (result.success) {
+        console.log('✅ [FRONTEND] API generation successful!');
+        console.log('✅ [FRONTEND] Generated API ID:', result.api_id);
+        console.log('✅ [FRONTEND] Generated API URL:', result.api_url);
         setGeneratedApi(result);
         if (result.warning) {
+          console.log('⚠️ [FRONTEND] Warning received:', result.warning);
           toast.warning(result.warning);
         } else {
           toast.success('API generated successfully!');
         }
       } else {
+        console.log('❌ [FRONTEND] API generation failed:', result.error);
         toast.error(result.error || 'Failed to generate API');
       }
     } catch (error) {
-      toast.error('Failed to generate API');
+      console.log('💥 [FRONTEND] Exception caught in generateApi:');
+      console.error('💥 [FRONTEND] Error details:', error);
+      console.log('💥 [FRONTEND] Error message:', error instanceof Error ? error.message : 'Unknown error');
+      console.log('💥 [FRONTEND] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      toast.error(`Failed to generate API: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
+      console.log('🏁 [FRONTEND] generateApi function completed');
       setIsGenerating(false);
     }
   };
@@ -149,7 +119,7 @@ export default function Home() {
           </h1>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             Transform your Python functions into REST APIs instantly. 
-            Write your code, validate it, and get a working API endpoint.
+            Write your code and get a working API endpoint.
           </p>
         </div>
 
@@ -184,37 +154,15 @@ export default function Home() {
               </div>
             </div>
 
-            <button
-              onClick={validateCode}
-              disabled={isValidating}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <Play className="w-4 h-4" />
-              {isValidating ? 'Validating...' : 'Validate Code'}
-            </button>
-
-            {/* Validation Result */}
-            {validationResult && (
-              <div className={`mt-4 p-4 rounded-lg border ${
-                validationResult.isValid 
-                  ? 'bg-green-50 border-green-200 text-green-800'
-                  : 'bg-red-50 border-red-200 text-red-800'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {validationResult.isValid ? (
-                    <CheckCircle className="w-5 h-5" />
-                  ) : (
-                    <AlertCircle className="w-5 h-5" />
-                  )}
-                  <span className="font-medium">
-                    {validationResult.isValid ? 'Validation Passed' : 'Validation Failed'}
-                  </span>
-                </div>
-                {validationResult.error && (
-                  <p className="mt-2 text-sm">{validationResult.error}</p>
-                )}
+            <div className="mt-4 p-4 rounded-lg border bg-blue-50 border-blue-200 text-blue-800">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-medium">
+                  Ready to Generate API
+                </span>
               </div>
-            )}
+              <p className="mt-2 text-sm">Your Python code will be validated during API generation.</p>
+            </div>
           </div>
 
           {/* API Generation Section */}
@@ -252,7 +200,7 @@ export default function Home() {
               
               <button
                 onClick={generateApi}
-                disabled={isGenerating || !validationResult?.isValid}
+                disabled={isGenerating}
                 className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
               >
                 {isGenerating ? 'Generating...' : 'Generate API'}

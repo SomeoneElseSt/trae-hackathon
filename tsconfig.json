@@ -22,6 +22,10 @@
     "noFallthroughCasesInSwitch": false,
     "noUncheckedSideEffectImports": false,
     "forceConsistentCasingInFileNames": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "baseUrl": "./",
     "paths": {
       "@/*": [
@@ -30,11 +34,19 @@
     },
     "types": [
       "node",
-      "express"
+      "express",
+      "vite/client"
     ]
   },
   "include": [
     "src",
-    "api"
+    "api",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }
